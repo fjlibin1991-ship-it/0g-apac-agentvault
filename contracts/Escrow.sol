@@ -77,7 +77,10 @@ contract Escrow is Ownable, ReentrancyGuard {
     
     /// @notice Dispute arbiter address
     address public arbiter;
-    
+
+    /// @notice Authorized callers (e.g. ServiceMarketplace) that can release/refund
+    mapping(address => bool) public authorizedCallers;
+
     /// @notice Platform fee percentage (in basis points, 100 = 1%)
     uint256 public platformFeeBps = 250; // 2.5%
     
@@ -123,13 +126,32 @@ contract Escrow is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Release funds from escrow to seller
+     * @notice Authorize a contract to release/refund escrows
+     * @param caller Contract address to authorize
+     */
+    function authorizeCaller(address caller) external onlyOwner {
+        authorizedCallers[caller] = true;
+    }
+
+    /**
+     * @notice Revoke authorization from a contract
+     * @param caller Contract address to revoke
+     */
+    function revokeCaller(address caller) external onlyOwner {
+        authorizedCallers[caller] = false;
+    }
+
+    /**
+     * @notice Release funds from escrow to seller (buyer or authorized marketplace)
      * @param orderId Order ID to release
      */
     function release(bytes32 orderId) external nonReentrant {
         EscrowDetail storage escrow = escrows[orderId];
         require(escrow.state == EscrowState.Deposited, "Escrow: not deposited");
-        require(escrow.buyer == msg.sender, "Escrow: not buyer");
+        require(
+            escrow.buyer == msg.sender || authorizedCallers[msg.sender],
+            "Escrow: not buyer or authorized"
+        );
 
         uint256 amount = escrow.amount;
         uint256 fee = (amount * platformFeeBps) / 10000;
@@ -199,12 +221,16 @@ contract Escrow is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Refund buyer (only in special circumstances)
+     * @notice Refund buyer (buyer, arbiter, or authorized marketplace)
      * @param orderId Order ID to refund
      */
-    function refund(bytes32 orderId) external onlyOwner nonReentrant {
+    function refund(bytes32 orderId) external nonReentrant {
         EscrowDetail storage escrow = escrows[orderId];
         require(escrow.state == EscrowState.Deposited, "Escrow: not deposited");
+        require(
+            escrow.buyer == msg.sender || msg.sender == arbiter || authorizedCallers[msg.sender],
+            "Escrow: not authorized"
+        );
 
         uint256 amount = escrow.amount;
         escrow.state = EscrowState.Refunded;

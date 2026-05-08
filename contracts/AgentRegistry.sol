@@ -42,6 +42,12 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
     /// @notice Mapping to check if address is registered
     mapping(address => bool) public isRegistered;
 
+    /// @notice Total count of registered agents
+    uint256 public agentCount;
+
+    /// @notice Authorized callers (e.g. ServiceMarketplace) that can update reputation
+    mapping(address => bool) public authorizedCallers;
+
     /// @notice Minimum reputation score
     uint256 public constant MIN_REPUTATION = 0;
     
@@ -72,6 +78,7 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
 
         isRegistered[msg.sender] = true;
         agentIdToAddress[agentId] = msg.sender;
+        agentCount++;
 
         emit AgentRegistered(msg.sender, agentId, metadataURI);
     }
@@ -91,50 +98,51 @@ contract AgentRegistry is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Update agent reputation score
+     * @notice Update agent reputation score (authorized callers only)
      * @param agent Address of the agent
      * @param delta Change in reputation (positive or negative)
      */
-    function updateReputation(address agent, int256 delta) external onlyOwner nonReentrant {
+    function updateReputation(address agent, int256 delta) external nonReentrant {
+        require(
+            msg.sender == owner() || authorizedCallers[msg.sender],
+            "AgentRegistry: not authorized"
+        );
         require(isRegistered[agent], "AgentRegistry: agent not registered");
-        
+
         Agent storage agentData = agents[agent];
         int256 newReputation = int256(agentData.reputation) + delta;
-        
+
         // Clamp reputation to valid range
         if (newReputation < int256(MIN_REPUTATION)) {
             newReputation = int256(MIN_REPUTATION);
         } else if (newReputation > int256(MAX_REPUTATION)) {
             newReputation = int256(MAX_REPUTATION);
         }
-        
+
         agentData.reputation = uint256(newReputation);
-        
+
         emit ReputationUpdated(agent, agentData.agentId, delta, agentData.reputation);
     }
 
     /**
-     * @notice Adjust reputation by a specific value (public version for marketplace feedback)
-     * @param agent Address of the agent
-     * @param rating Rating change (typically -5 to +10)
+     * @notice Authorize a contract (e.g. ServiceMarketplace) to update reputation
+     * @param caller Address of the contract to authorize
      */
-    function adjustReputation(address agent, uint256 rating) external {
-        require(isRegistered[agent], "AgentRegistry: agent not registered");
-        require(rating <= 100, "AgentRegistry: invalid rating value");
+    function authorizeCaller(address caller) external onlyOwner {
+        authorizedCallers[caller] = true;
+    }
 
-        Agent storage agentData = agents[agent];
-        int256 change = int256(rating) - 50; // Convert 0-100 to -50 to +50
-        int256 newReputation = int256(agentData.reputation) + change;
-        
-        if (newReputation < int256(MIN_REPUTATION)) {
-            newReputation = int256(MIN_REPUTATION);
-        } else if (newReputation > int256(MAX_REPUTATION)) {
-            newReputation = int256(MAX_REPUTATION);
-        }
-        
-        agentData.reputation = uint256(newReputation);
-        
-        emit ReputationUpdated(agent, agentData.agentId, change, agentData.reputation);
+    /**
+     * @notice Revoke authorization from a contract
+     * @param caller Address of the contract to revoke
+     */
+    function revokeCaller(address caller) external onlyOwner {
+        authorizedCallers[caller] = false;
+    }
+
+    /// @notice Get registered agent count
+    function getAgentCount() external view returns (uint256) {
+        return agentCount;
     }
 
     /**

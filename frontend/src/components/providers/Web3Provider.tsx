@@ -6,13 +6,13 @@ import { mainnet, sepolia } from 'wagmi/chains';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // 0G Network configuration
-const 0gChain = {
-  id: 0,
+const ogChain = {
+  id: 16600, // 0G testnet chain ID
   name: '0G Network',
   nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
   rpcUrls: {
-    default: { http: ['https://rpc.0g.ai'] },
-    public: { http: ['https://rpc.0g.ai'] },
+    default: { http: ['https://rpc-testnet.0g.ai'] },
+    public: { http: ['https://rpc-testnet.0g.ai'] },
   },
   blockExplorers: {
     default: { name: '0G Explorer', url: 'https://explorer.0g.ai' },
@@ -20,11 +20,11 @@ const 0gChain = {
 };
 
 const wagmiConfig = createConfig({
-  chains: [mainnet, sepolia, 0gChain as any],
+  chains: [mainnet, sepolia, ogChain],
   transports: {
     [mainnet.id]: http(),
     [sepolia.id]: http(),
-    [0gChain.id]: http('https://rpc.0g.ai'),
+    [ogChain.id]: http('https://rpc-testnet.0g.ai'),
   },
   connectors: [],
 });
